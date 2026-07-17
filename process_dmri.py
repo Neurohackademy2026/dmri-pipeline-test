@@ -11,19 +11,26 @@ def process_pipeline():
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
 
-    # Check for inputs - fallback to synthetic generation if not loaded
+    # Check for inputs - fallback to Stanford HARDI, then synthetic generation
     if not os.path.exists(input_file):
-        print(f"[!] Warning: '{input_file}' not found. Generating synthetic dMRI dataset...")
-        # Create mock 4D brain diffusion data (x, y, z, volumes)
-        synthetic_data = np.random.normal(loc=200, scale=15, size=(64, 64, 30, 15))
-        # Mask out background to look like a logical brain shape
-        x, y, z, _ = np.indices(synthetic_data.shape)
-        mask = (x-32)**2 + (y-32)**2 + (z-15)**2 < 20**2
-        synthetic_data[~mask] = np.random.normal(loc=15, scale=5, size=synthetic_data[~mask].shape)
+        print(f"[!] Warning: '{input_file}' not found. Fetching Stanford HARDI dataset from dipy...")
+        try:
+            from dipy.data import get_fnames
+            fdwi, _, _ = get_fnames(name="stanford_hardi")
+            input_file = fdwi
+            print(f"[+] Using Stanford HARDI dataset: {input_file}")
+        except Exception as exc:
+            print(f"[!] Warning: Stanford HARDI fetch failed ({exc}). Generating synthetic dMRI dataset...")
+            # Create mock 4D brain diffusion data (x, y, z, volumes)
+            synthetic_data = np.random.normal(loc=200, scale=15, size=(64, 64, 30, 15))
+            # Mask out background to look like a logical brain shape
+            x, y, z, _ = np.indices(synthetic_data.shape)
+            mask = (x-32)**2 + (y-32)**2 + (z-15)**2 < 20**2
+            synthetic_data[~mask] = np.random.normal(loc=15, scale=5, size=synthetic_data[~mask].shape)
 
-        mock_img = nib.Nifti1Image(synthetic_data.astype(np.float32), np.eye(4))
-        nib.save(mock_img, input_file)
-        print("[+] Created synthetic dMRI dataset!")
+            mock_img = nib.Nifti1Image(synthetic_data.astype(np.float32), np.eye(4))
+            nib.save(mock_img, input_file)
+            print("[+] Created synthetic dMRI dataset!")
 
     print("[+] Loading dMRI Data...")
     img = nib.load(input_file)

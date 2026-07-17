@@ -2,6 +2,12 @@ name: Execute dMRI Pipeline
 
 on:
   workflow_dispatch: # Allows clicking 'Run' in the browser
+    inputs:
+      release_tag:
+        description: 'Release tag containing the sample_dmri.nii.gz asset'
+        required: false
+        default: 'v1.0-data'
+        type: string
   release:
     types: [published] # Triggers automatically when a new release is built
 
@@ -34,11 +40,18 @@ jobs:
       - name: Checkout Repository Files
         uses: actions/checkout@v4
 
+      - name: Cache dipy Datasets
+        uses: actions/cache@v4
+        with:
+          path: /github/home/.dipy
+          key: dipy-stanford-hardi-v1
+
       - name: Attempt Data Retrieval from GitHub Releases
         id: download-data
         run: |
           # Use Git CLI built-in release commands
-          gh release download v1.0-data --pattern "sample_dmri.nii.gz" --clobber || echo "No real scan asset found. Fallback triggered."
+          TAG="${{ inputs.release_tag || github.event.release.tag_name || 'v1.0-data' }}"
+          gh release download "$TAG" --pattern "sample_dmri.nii.gz" --clobber || echo "No real scan asset found. Fallback triggered."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -55,4 +68,17 @@ jobs:
           STATUS=$(python -c "import json; print(json.load(open('output/stats.json'))['status'])")
 
           # Inject stats into clean template
-          cat < output/index.html
+          cat > output/index.html << EOF
+          <!DOCTYPE html>
+          <html>
+          <head><title>dMRI Pipeline QC Report</title></head>
+          <body>
+            <h1>dMRI Pipeline QC Report</h1>
+            <p>Status: ${STATUS}</p>
+            <p>SNR: ${SNR}</p>
+            <p>Resolution: ${RES}</p>
+            <p>Volumes: ${VOLS}</p>
+            <img src="qc_slice.png" alt="QC slice">
+          </body>
+          </html>
+          EOF
