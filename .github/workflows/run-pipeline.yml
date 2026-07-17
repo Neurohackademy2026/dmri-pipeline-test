@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # Required to publish back to pages
+      packages: read # Required to pull the private GHCR image
 
     # Point directly to your prebuilt container
     container:
