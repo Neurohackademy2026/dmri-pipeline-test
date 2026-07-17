@@ -1,0 +1,46 @@
+name: Execute dMRI Pipeline
+
+on:
+  workflow_dispatch: # Allows clicking 'Run' in the browser
+  release:
+    types: [published] # Triggers automatically when a new release is built
+
+jobs:
+  run-analysis:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to publish back to pages
+
+    # Point directly to your prebuilt container
+    container:
+      image: ghcr.io/${{ github.repository }}/dmri-processor:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout Repository Files
+        uses: actions/checkout@v4
+
+      - name: Attempt Data Retrieval from GitHub Releases
+        id: download-data
+        run: |
+          # Use Git CLI built-in release commands
+          gh release download v1.0-data --pattern "sample_dmri.nii.gz" --clobber || echo "No real scan asset found. Fallback triggered."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Core Python Processing
+        run: python process_dmri.py
+
+      # Create dashboard files before deploying
+      - name: Construct Website Assets
+        run: |
+          # Read raw statistics
+          SNR=$(python -c "import json; print(json.load(open('output/stats.json'))['snr_value'])")
+          RES=$(python -c "import json; print(json.load(open('output/stats.json'))['resolution'])")
+          VOLS=$(python -c "import json; print(json.load(open('output/stats.json'))['total_volumes'])")
+          STATUS=$(python -c "import json; print(json.load(open('output/stats.json'))['status'])")
+
+          # Inject stats into clean template
+          cat < output/index.html
