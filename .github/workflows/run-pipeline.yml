@@ -6,14 +6,25 @@ on:
     types: [published] # Triggers automatically when a new release is built
 
 jobs:
+  prep:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.name }}
+    steps:
+      - name: Downcase Image Name for Docker Compliance
+        id: image
+        run: |
+          echo "name=ghcr.io/$(echo "${{ github.repository }}/dmri-processor" | tr '[:upper:]' '[:lower:]'):latest" >> $GITHUB_OUTPUT
+
   run-analysis:
+    needs: prep
     runs-on: ubuntu-latest
     permissions:
       contents: write # Required to publish back to pages
 
     # Point directly to your prebuilt container
     container:
-      image: ghcr.io/${{ github.repository }}/dmri-processor:latest
+      image: ${{ needs.prep.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
