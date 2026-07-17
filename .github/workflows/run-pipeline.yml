@@ -31,7 +31,6 @@ jobs:
     needs: prep
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Required to publish back to pages
       packages: read # Required to pull the private GHCR image
 
     # Point directly to your prebuilt container
@@ -90,3 +89,22 @@ jobs:
           </body>
           </html>
           EOF
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: output
+
+  deploy-pages:
+    needs: run-analysis
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
