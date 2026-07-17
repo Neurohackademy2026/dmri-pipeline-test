@@ -32,6 +32,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: read # Required to pull the private GHCR image
+    outputs:
+      snr: ${{ steps.stats.outputs.snr }}
+      resolution: ${{ steps.stats.outputs.resolution }}
+      volumes: ${{ steps.stats.outputs.volumes }}
+      status: ${{ steps.stats.outputs.status }}
 
     # Point directly to your prebuilt container
     container:
@@ -67,12 +72,19 @@ jobs:
 
       # Create dashboard files before deploying
       - name: Construct Website Assets
+        id: stats
         run: |
           # Read raw statistics
           SNR=$(python -c "import json; print(json.load(open('output/stats.json'))['snr_value'])")
           RES=$(python -c "import json; print(json.load(open('output/stats.json'))['resolution'])")
           VOLS=$(python -c "import json; print(json.load(open('output/stats.json'))['total_volumes'])")
           STATUS=$(python -c "import json; print(json.load(open('output/stats.json'))['status'])")
+
+          # Expose stats as job outputs for the optional notify job
+          echo "snr=$SNR" >> "$GITHUB_OUTPUT"
+          echo "resolution=$RES" >> "$GITHUB_OUTPUT"
+          echo "volumes=$VOLS" >> "$GITHUB_OUTPUT"
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
 
           # Inject stats into clean template
           cat > output/index.html << EOF
@@ -104,7 +116,49 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+  notify:
+    needs: [run-analysis, deploy-pages]
+    runs-on: ubuntu-latest
+    steps:
+      # Optional: only sends if MAIL_USERNAME/MAIL_PASSWORD/MAIL_TO secrets are configured.
+      # See README for setup instructions.
+      - name: Check Mail Config
+        id: check-mail
+        env:
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+        run: |
+          if [ -n "$MAIL_USERNAME" ] && [ -n "$MAIL_PASSWORD" ] && [ -n "$MAIL_TO" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Email Result Notification
+        if: steps.check-mail.outputs.configured == 'true'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.MAIL_SERVER || 'smtp.gmail.com' }}
+          server_port: ${{ secrets.MAIL_PORT || '465' }}
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          to: ${{ secrets.MAIL_TO }}
+          from: dMRI Pipeline
+          subject: "dMRI Pipeline Result: ${{ needs.run-analysis.outputs.status }}"
+          body: |
+            New dMRI pipeline run completed.
+
+            Status:     ${{ needs.run-analysis.outputs.status }}
+            SNR:        ${{ needs.run-analysis.outputs.snr }}
+            Resolution: ${{ needs.run-analysis.outputs.resolution }}
+            Volumes:    ${{ needs.run-analysis.outputs.volumes }}
+
+            Report: ${{ needs.deploy-pages.outputs.page_url }}
