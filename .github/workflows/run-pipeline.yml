@@ -4,9 +4,14 @@ on:
   workflow_dispatch: # Allows clicking 'Run' in the browser
     inputs:
       release_tag:
-        description: 'Release tag containing the sample_dmri.nii.gz asset'
+        description: 'Release tag containing the scan data asset'
         required: false
         default: 'v1.0-data'
+        type: string
+      asset_name:
+        description: 'Name of the scan data asset to download from the release'
+        required: false
+        default: 'sample_dmri.nii.gz'
         type: string
   release:
     types: [published] # Triggers automatically when a new release is built
@@ -51,12 +56,15 @@ jobs:
         run: |
           # Use Git CLI built-in release commands
           TAG="${{ inputs.release_tag || github.event.release.tag_name || 'v1.0-data' }}"
-          gh release download "$TAG" --pattern "sample_dmri.nii.gz" --clobber || echo "No real scan asset found. Fallback triggered."
+          ASSET="${{ inputs.asset_name || 'sample_dmri.nii.gz' }}"
+          gh release download "$TAG" --pattern "$ASSET" --clobber || echo "No real scan asset found. Fallback triggered."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Core Python Processing
         run: python process_dmri.py
+        env:
+          INPUT_FILE: ${{ inputs.asset_name || 'sample_dmri.nii.gz' }}
 
       # Create dashboard files before deploying
       - name: Construct Website Assets

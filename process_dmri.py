@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 def process_pipeline():
     # File locations
-    input_file = "sample_dmri.nii.gz"
+    input_file = os.environ.get("INPUT_FILE", "sample_dmri.nii.gz")
     output_dir = "output"
     os.makedirs(output_dir, exist_ok=True)
 
